@@ -8,6 +8,8 @@ const rl = readline.createInterface({
   output: process.stdout
 });
 
+// 코레일 역별 인덱스
+const hidKorInx = ['가', '나', '다', '라', '마', '바', '사', '아', '자', '차', '카', '타', '파', '하'];
 
 // 코레일 로그인 URL
 const korailLoginUrl = 'https://www.letskorail.com/korail/com/login.do';
@@ -21,7 +23,32 @@ const reservationConfirmTable = '#pnrInfo > div > table:nth-child(1) > tbody > t
 // ms 만큼 딜레이
 async function delay (ms) {
   await new Promise((resolve) => setTimeout(resolve, ms));
-}  
+}
+
+async function getStationList(browser, str) {
+  // 가~하 순으로 인덱스 추출
+  const regionIndex = hidKorInx.findIndex((ele) => ele === str);
+  if (regionIndex === -1) {
+    throw new Error('Not found station');
+  }
+
+  const page = await browser.newPage();
+
+  // 코레일 역 목록 페이지 접근
+  await page.goto(`https://www.letskorail.com/ebizprd/EbizPrdTicketPr11100/searchTnCode.do?hidKorInx=${regionIndex}`, {
+    waitUntil: 'networkidle0'
+  });
+
+  // 코레일 역 이름 배열로 만듬
+  const data = await page.evaluate(() => {
+    const tds = Array.from(document.querySelectorAll('body div div.cont div table tr td a'));
+    return tds.map(td => td.innerText.trim())
+  });
+
+  await page.close();
+
+  return data;
+}
 
 // 티켓 조회 재귀함수
 async function ticketCheckLoop(page) {
