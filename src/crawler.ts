@@ -44,7 +44,10 @@ async function getStationList(browser: Browser, str: string) {
   return data;
 }
 
-async function brandingStationName(browser: Browser, stationName: string) {
+/**
+ * 역 이름 브랜딩
+ */
+export async function brandingStationName(browser: Browser, stationName: string) {
   const firstWord = hangul.disassemble(stationName)[0];
   const regionIndexEle = hangul.assemble([firstWord, 'ㅏ']);
 
@@ -57,6 +60,9 @@ async function brandingStationName(browser: Browser, stationName: string) {
   return stationName as StationName;
 }
 
+/**
+ * 핸드폰 번호 기반 코레일 로그인
+ */
 export async function korailLogin(browser: Browser, phoneNums: [number, number], password: string) {
   const page = await browser.newPage();
 
@@ -78,7 +84,10 @@ export async function korailLogin(browser: Browser, phoneNums: [number, number],
   return page as LoginedPage;
 }
 
-async function ticketSearch(page: LoginedPage, departStation: StationName, arriveStation: StationName, departDate: Date) {
+/**
+ * 승차권 조회
+ */
+export async function ticketSearch(page: LoginedPage, departStation: StationName, arriveStation: StationName, departDate: Date) {
   // 승차권 조회 페이지 이동
   await Promise.all([
     page.click('#header > div.lnb > div.lnb_m01 > h3 > a'),
@@ -95,6 +104,10 @@ async function ticketSearch(page: LoginedPage, departStation: StationName, arriv
   await page.select('select[name=selGoYear]', year.toString()); // 출발 날짜 (년)
   await page.select('select[name=selGoMonth]', month.toString());  // 출발 날짜 (월)
   await page.select('select[name=selGoDay]', day.toString());  // 출발 날짜 (일))
+
+  await page.click('#center > form > div > p > a');
+
+  await page.screenshot({ path: `./logs/test.png`, fullPage: true }); // Logging
 }
 
 /**
