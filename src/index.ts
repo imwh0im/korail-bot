@@ -45,11 +45,21 @@ async function run(departStation: string, arriveStation: string, departDate: str
 async function test() {
   console.log('run')
   const browser = await puppeteer.launch();
-  const loginedPage = await korailLogin(browser, [7604, 9332], 'aram9332~');
-  const departStation = await brandingStationName(browser, '춘천');
+  const page = await korailLogin(browser, [7604, 9332], 'aram9332!');
+  page.on('dialog', async dialog => {
+    await dialog.accept();
+	});
+  const departStation = await brandingStationName(browser, '남춘천');
   const arriveStation = await brandingStationName(browser, '용산');
-  return ticketSearch(loginedPage, departStation, arriveStation, dayjs('2024-08-03 07:11:00').toDate());
+  await ticketSearch(
+    page,
+    departStation,
+    arriveStation,
+    dayjs('2024-09-13 07:26:00').toDate()
+  );
 }
+
+test().then(() => console.log('done'));
 
 
 // rl.question('출발 역을 입력해주세요. (용산역 => 용산) ', (answer) => {

@@ -1,6 +1,6 @@
 import { Browser, Page } from "puppeteer";
 import { KorailStaionName, LoginedPage, StationName } from "./types";
-import { delay } from "./utils";
+import { delay, getDates } from "./utils";
 import dayjs from "dayjs";
 import hangul from "hangul-js";
 
@@ -91,23 +91,23 @@ export async function ticketSearch(page: LoginedPage, departStation: StationName
   // 승차권 조회 페이지 이동
   await Promise.all([
     page.click('#header > div.lnb > div.lnb_m01 > h3 > a'),
-    page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+    page.waitForNavigation({ waitUntil: 'domcontentloaded' })
   ]);
 
-  const year = departDate.getFullYear();
-  const month = departDate.getMonth();
-  const day = departDate.getDate();
+  const [year, month, day, hour] = getDates(departDate);
 
   // 승차권 조회 조건
   await page.$eval('input[name=txtGoStart]', (el, n) => el.value = n, departStation) // 출발역
   await page.$eval('input[name=txtGoEnd]', (el, n) => el.value = n, arriveStation)  // 도착역
-  await page.select('select[name=selGoYear]', year.toString()); // 출발 날짜 (년)
-  await page.select('select[name=selGoMonth]', month.toString());  // 출발 날짜 (월)
-  await page.select('select[name=selGoDay]', day.toString());  // 출발 날짜 (일))
+  await page.select('select[name=selGoYear]', year); // 출발 날짜 (년)
+  await page.select('select[name=selGoMonth]', month);  // 출발 날짜 (월)
+  await page.select('select[name=selGoDay]', day);  // 출발 날짜 (일))
+  await page.select('select[name=selGoHour]', hour); // 출발 시간 (시간)
 
   await page.click('#center > form > div > p > a');
+  await page.waitForNavigation({ waitUntil: 'networkidle0' });
 
-  await page.screenshot({ path: `./logs/test.png`, fullPage: true }); // Logging
+  return page;
 }
 
 /**
