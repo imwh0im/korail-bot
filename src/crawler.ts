@@ -49,7 +49,7 @@ export async function brandingStationName(browser: Browser, stationName: string)
   const stationList = await getStationList(browser, regionIndexEle);
   const hasStation = stationList.includes(stationName);
   if (!hasStation) {
-    throw new Error('invalid station name');
+    throw new Error(`invalid station name: ${stationName}`);
   }
 
   return stationName as StationName;
