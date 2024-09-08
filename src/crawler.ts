@@ -1,17 +1,12 @@
 import { Browser, Page } from "puppeteer";
-import { KorailStaionName, LoginedPage, StationName } from "./types";
+import { KorailStaionName, LoginedPage, StationName, TicketPage } from "./types";
 import { delay, getDates } from "./utils";
 import dayjs from "dayjs";
 import hangul from "hangul-js";
+import { DateBraning } from "./types/date-branding.type";
 
 // 코레일 역별 인덱스
 const hidKorInx = ['가', '나', '다', '라', '마', '바', '사', '아', '자', '차', '카', '타', '파', '하'];
-
-// 여러 곳에서 참조하는 예약 버튼 selector
-const reservationButtonSelector = '#tableResult > tbody > tr:nth-child(1) > td:nth-child(6) > a:nth-child(1)';
-
-// 예약 완료 후 정보를 조회하는 테이블
-const reservationConfirmTable = '#pnrInfo > div > table:nth-child(1) > tbody > tr >';
 
 // 코레일 로그인 URL
 const korailLoginUrl = 'https://www.letskorail.com/korail/com/login.do';
@@ -23,7 +18,7 @@ async function getStationList(browser: Browser, str: string) {
   // 가~하 순으로 인덱스 추출
   const regionIndex = hidKorInx.findIndex((ele) => ele === str);
   if (regionIndex === -1) {
-    throw new Error('Not found station');
+    throw new Error(`Not found station: ${str}`);
   }
 
   const page = await browser.newPage();
@@ -85,16 +80,48 @@ export async function korailLogin(browser: Browser, phoneNums: [number, number],
 }
 
 /**
- * 승차권 조회
+ * 티켓의 테이블 인덱스
  */
-export async function ticketSearch(page: LoginedPage, departStation: StationName, arriveStation: StationName, departDate: Date) {
+async function getTicketIndex(
+  page: TicketPage, departStation: StationName, hour: DateBraning, minute: DateBraning
+): Promise<number> {
+  // 테이블 인덱스 고르기
+  const ticketList = await page.evaluate(() => {
+    const tableBody = document.querySelectorAll('#tableResult > tbody > tr > td:nth-child(3)');
+    return Array.from(tableBody).map(element => element.textContent?.trim())
+  });
+  const ticketName = `${departStation}${hour}:${minute}`;
+  let ticketIndex = ticketList.findIndex(ticket => ticket === ticketName);
+
+  if(ticketIndex === -1) {
+    throw new Error(`cannot found ticket ${ticketName}`);
+  }
+
+  if (ticketIndex === 0) {
+    ticketIndex = 1;
+  } else {
+    ticketIndex = ticketIndex * 2 + 1;
+  }
+  return ticketIndex;
+}
+
+/**
+ * 승차권 조회
+ * @retuns [TicketPage, TicketIndex]
+ */
+export async function ticketSearch(
+  page: LoginedPage,
+  departStation: StationName,
+  arriveStation: StationName,
+  departDate: Date
+): Promise<[TicketPage, number]> {
   // 승차권 조회 페이지 이동
   await Promise.all([
     page.click('#header > div.lnb > div.lnb_m01 > h3 > a'),
     page.waitForNavigation({ waitUntil: 'domcontentloaded' })
   ]);
 
-  const [year, month, day, hour] = getDates(departDate);
+  const [year, month, day, hour, minute] = getDates(departDate);
 
   // 승차권 조회 조건
   await page.$eval('input[name=txtGoStart]', (el, n) => el.value = n, departStation) // 출발역
@@ -107,56 +134,40 @@ export async function ticketSearch(page: LoginedPage, departStation: StationName
   await page.click('#center > form > div > p > a');
   await page.waitForNavigation({ waitUntil: 'networkidle0' });
 
-  return page;
+  await page.screenshot({ path: `./logs/ticket-search.png`, fullPage: true }); // Logging
+
+  const ticketPage = (page as Page) as TicketPage;
+  const ticketIndex = await getTicketIndex(ticketPage, departStation, hour, minute);
+
+  return [(page as Page) as TicketPage, ticketIndex];
 }
 
 /**
- * 티켓 조회 재귀 함수
+ * 티켓 예약
  */
-async function ticketCheckLoop(page: Page) {
-  // 최소한의 동업자 정신 3초를 기다린다.
-  await delay(3000)
-  const now = dayjs();
-  console.log(`${now.format('HH:mm:ss')} 티켓을 탐색합니다.`)
-  // 조건에 맞는 열차 조회
-  try {
-    // 처음 이후에는 이 셀렉터로 가야함
-    await page.click('#center > div.ticket_box > p > a')
-  } catch (err) {
-    // 처음 조회할때는 이 셀렉터로 가야함
-    await page.click('#center > form > div > p > a');
-  }
-  await page.waitForNavigation({ waitUntil: 'networkidle0' });
-
-  // 티켓 있는지 체크
-  // 셀렉터 존재 여부로 티켓이 있는지 없는지 확인
+export async function reservationTicket(page: TicketPage, ticketIndex: number): Promise<void> {
+  console.log(`${dayjs().format('HH:mm:ss')} 티켓을 탐색합니다.`);
+  const reservationButtonSelector = `#tableResult > tbody > tr:nth-child(${ticketIndex}) > td:nth-child(6) > a:nth-child(1)`
   const hasTicket = await page.$(reservationButtonSelector);
-  // 티켓 있으면 예약 진행 후 안내 하고 프로세스 종료
+  // 티켓이 있을때
   if (!!hasTicket) {
-    await page.screenshot({ path: `./logs/has-ticket-${now.format('HH:mm:ss')}.png`, fullPage: true }); // Logging
-    await page.click(reservationButtonSelector)
+    await page.screenshot({ path: `./logs/has-ticket.png`, fullPage: true }); // Logging
+    await page.click(reservationButtonSelector);
     await page.waitForNavigation({ waitUntil: 'networkidle0' });
     // 예약 클릭했을떄 이미 예약 되었는지 확인
     const alreadyReservation = await page.evaluate(() => {
       const element = document.querySelector('#contents > div.content > div.cont_info > div > span');
       return !!element?.textContent;
     });
-    // 티켓 조회와 예약버튼 누르는 사이에 이미 예약이 되었을 경우 이전 페이지로 돌아가고 다시 Loop
+    // 조회와 예약 사이에 이미 선점된 경우
     if (alreadyReservation) {
-      await page.screenshot({ path: `./logs/already-reservation-${now.format('HH:mm:ss')}.png`, fullPage: true }); // Logging
-      console.log(`이미 예약됨 ${now.format('HH:mm:ss')}`);
       await page.click('#contents > div.content > div.cont_info > div > p.btn_c > a');
-      return ticketCheckLoop(page);
+    } else {
+      return;
     }
-    await page.screenshot({ path: `./logs/success-${now.format('HH:mm:ss')}.png`, fullPage: true }); // Logging
-    const date = await page.$eval(`${reservationConfirmTable} td:nth-child(1)`, (data) => data.textContent) || '';
-    const departTime = await page.$eval(`${reservationConfirmTable} td:nth-child(5)`, (data) => data.textContent) || '';
-    const depart = await page.$eval(`${reservationConfirmTable} td.bdl_on`, (data) => data.textContent) || '';
-    const arriveTime = await page.$eval(`${reservationConfirmTable} td:nth-child(7)`, (data) => data.textContent) || '';
-    const arrive = await page.$eval(`${reservationConfirmTable} td:nth-child(6)`, (data) => data.textContent) || '';
-    console.log(`${date.trim()} 날에 ${depart.trim()} 에서 ${departTime.trim()} 에 출발하여, ${arrive.trim()} 에 ${arriveTime.trim()} 도착 예정인 표가 예약되었습니다. 이 과정은 *예약*만 된것이므로 웹 페이지 또는 앱 내에서 "예약 승차권 조회" 를 통해 결제를 하여 예약을 확정하세요.`)
-  } else {
-    // 티켓이 없다면 다시 함수 재귀
-    return ticketCheckLoop(page);
   }
+  // 최소한의 동업자 정신 1.5초를 기다린다.
+  await delay(1500)
+  // 티켓이 없으면 재귀
+  return reservationTicket(page, ticketIndex);
 }

@@ -1,5 +1,6 @@
 import { Page } from "puppeteer"
-
-type Brand<Key extends string, value> = value & { __brand: Key }
+import { Brand } from "./branding.type";
 
 export type LoginedPage = Brand<'logined', Page>;
+
+export type TicketPage = Brand<'ticket', Page>;
